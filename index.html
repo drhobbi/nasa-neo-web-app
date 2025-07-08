@@ -327,10 +327,19 @@
             const ambientLight = new THREE.AmbientLight(0x404040, 0.5);
             scene.add(ambientLight);
 
-            const sunLight = new THREE.DirectionalLight(0xffffff, 1);
-            sunLight.position.set(50, 0, 0);
+            const sunLight = new THREE.DirectionalLight(0xffffff, 1.5);
+            sunLight.position.set(50, 20, 30);
             sunLight.castShadow = true;
+            sunLight.shadow.camera.left = -50;
+            sunLight.shadow.camera.right = 50;
+            sunLight.shadow.camera.top = 50;
+            sunLight.shadow.camera.bottom = -50;
             scene.add(sunLight);
+            
+            // Add a subtle blue light from the opposite side to simulate Earth's atmosphere
+            const atmosphereLight = new THREE.DirectionalLight(0x4080ff, 0.3);
+            atmosphereLight.position.set(-50, -20, -30);
+            scene.add(atmosphereLight);
 
             // Add stars
             createStarfield();
@@ -382,14 +391,218 @@
         function createEarth() {
             earth = new THREE.Group();
             
-            // Earth sphere
+            // Earth sphere with procedural texture
             const earthGeometry = new THREE.SphereGeometry(5, 64, 64);
+            
+            // Create a canvas texture for Earth
+            const canvas = document.createElement('canvas');
+            canvas.width = 2048;
+            canvas.height = 1024;
+            const context = canvas.getContext('2d');
+            
+            // Create ocean background with realistic color
+            const oceanGradient = context.createLinearGradient(0, 0, 0, canvas.height);
+            oceanGradient.addColorStop(0, '#001e3d');
+            oceanGradient.addColorStop(0.5, '#003366');
+            oceanGradient.addColorStop(1, '#001e3d');
+            context.fillStyle = oceanGradient;
+            context.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Add ocean texture
+            context.globalAlpha = 0.3;
+            for (let i = 0; i < 2000; i++) {
+                const x = Math.random() * canvas.width;
+                const y = Math.random() * canvas.height;
+                context.fillStyle = `rgba(0, 50, 100, ${Math.random() * 0.5})`;
+                context.fillRect(x, y, Math.random() * 3, Math.random() * 3);
+            }
+            context.globalAlpha = 1.0;
+            
+            // Function to draw landmass with more detail
+            function drawLandmass(points, baseColor, darkColor) {
+                context.save();
+                context.beginPath();
+                context.moveTo(points[0].x, points[0].y);
+                
+                for (let i = 1; i < points.length; i++) {
+                    if (points[i].curve) {
+                        context.quadraticCurveTo(
+                            points[i].cx, points[i].cy,
+                            points[i].x, points[i].y
+                        );
+                    } else {
+                        context.lineTo(points[i].x, points[i].y);
+                    }
+                }
+                context.closePath();
+                
+                // Create gradient for landmass
+                const gradient = context.createLinearGradient(
+                    points[0].x, points[0].y,
+                    points[points.length-1].x, points[points.length-1].y
+                );
+                gradient.addColorStop(0, baseColor);
+                gradient.addColorStop(0.5, darkColor);
+                gradient.addColorStop(1, baseColor);
+                
+                context.fillStyle = gradient;
+                context.fill();
+                
+                // Add edge
+                context.strokeStyle = darkColor;
+                context.lineWidth = 1;
+                context.stroke();
+                
+                // Add terrain texture
+                context.clip();
+                context.globalAlpha = 0.3;
+                for (let i = 0; i < 200; i++) {
+                    const x = Math.random() * canvas.width;
+                    const y = Math.random() * canvas.height;
+                    const isDesert = Math.random() > 0.7;
+                    context.fillStyle = isDesert ? '#c4a574' : '#2d5016';
+                    context.fillRect(x, y, Math.random() * 4, Math.random() * 4);
+                }
+                context.restore();
+            }
+            
+            // Africa - more accurate shape
+            const africa = [
+                {x: 1024, y: 200},
+                {x: 1080, y: 220, curve: true, cx: 1060, cy: 200},
+                {x: 1100, y: 280, curve: true, cx: 1100, cy: 250},
+                {x: 1120, y: 350, curve: true, cx: 1110, cy: 315},
+                {x: 1100, y: 420, curve: true, cx: 1120, cy: 385},
+                {x: 1060, y: 480, curve: true, cx: 1080, cy: 450},
+                {x: 1000, y: 520, curve: true, cx: 1030, cy: 500},
+                {x: 940, y: 500, curve: true, cx: 970, cy: 520},
+                {x: 920, y: 450, curve: true, cx: 920, cy: 475},
+                {x: 930, y: 380, curve: true, cx: 920, cy: 415},
+                {x: 960, y: 300, curve: true, cx: 940, cy: 340},
+                {x: 980, y: 240, curve: true, cx: 970, cy: 270},
+                {x: 1024, y: 200, curve: true, cx: 1000, cy: 210}
+            ];
+            drawLandmass(africa, '#8b7355', '#6b5340');
+            
+            // Europe - connected to Africa
+            const europe = [
+                {x: 980, y: 240},
+                {x: 990, y: 180, curve: true, cx: 980, cy: 210},
+                {x: 1040, y: 140, curve: true, cx: 1015, cy: 160},
+                {x: 1100, y: 130, curve: true, cx: 1070, cy: 130},
+                {x: 1120, y: 160, curve: true, cx: 1120, cy: 145},
+                {x: 1080, y: 190, curve: true, cx: 1100, cy: 175},
+                {x: 1020, y: 200, curve: true, cx: 1050, cy: 195},
+                {x: 980, y: 240, curve: true, cx: 1000, cy: 220}
+            ];
+            drawLandmass(europe, '#4a7c59', '#3a5c49');
+            
+            // Asia - larger and more detailed
+            const asia = [
+                {x: 1120, y: 160},
+                {x: 1200, y: 140, curve: true, cx: 1160, cy: 150},
+                {x: 1400, y: 160, curve: true, cx: 1300, cy: 140},
+                {x: 1500, y: 200, curve: true, cx: 1450, cy: 170},
+                {x: 1550, y: 280, curve: true, cx: 1530, cy: 240},
+                {x: 1520, y: 360, curve: true, cx: 1540, cy: 320},
+                {x: 1450, y: 400, curve: true, cx: 1485, cy: 380},
+                {x: 1350, y: 380, curve: true, cx: 1400, cy: 395},
+                {x: 1250, y: 340, curve: true, cx: 1300, cy: 365},
+                {x: 1180, y: 280, curve: true, cx: 1215, cy: 310},
+                {x: 1120, y: 220, curve: true, cx: 1150, cy: 250},
+                {x: 1120, y: 160}
+            ];
+            drawLandmass(asia, '#5a8654', '#4a6644');
+            
+            // India
+            const india = [
+                {x: 1280, y: 340},
+                {x: 1300, y: 380, curve: true, cx: 1295, cy: 360},
+                {x: 1280, y: 450, curve: true, cx: 1295, cy: 415},
+                {x: 1250, y: 480, curve: true, cx: 1265, cy: 465},
+                {x: 1220, y: 460, curve: true, cx: 1235, cy: 475},
+                {x: 1230, y: 400, curve: true, cx: 1220, cy: 430},
+                {x: 1260, y: 360, curve: true, cx: 1245, cy: 380},
+                {x: 1280, y: 340}
+            ];
+            drawLandmass(india, '#7a8654', '#6a6644');
+            
+            // North America
+            const northAmerica = [
+                {x: 300, y: 150},
+                {x: 400, y: 140, curve: true, cx: 350, cy: 140},
+                {x: 500, y: 180, curve: true, cx: 450, cy: 150},
+                {x: 520, y: 250, curve: true, cx: 515, cy: 215},
+                {x: 480, y: 320, curve: true, cx: 505, cy: 285},
+                {x: 420, y: 360, curve: true, cx: 450, cy: 340},
+                {x: 350, y: 340, curve: true, cx: 385, cy: 355},
+                {x: 300, y: 280, curve: true, cx: 320, cy: 310},
+                {x: 280, y: 200, curve: true, cx: 285, cy: 240},
+                {x: 300, y: 150, curve: true, cx: 285, cy: 175}
+            ];
+            drawLandmass(northAmerica, '#4a7c59', '#3a5c49');
+            
+            // South America
+            const southAmerica = [
+                {x: 420, y: 360},
+                {x: 440, y: 420, curve: true, cx: 435, cy: 390},
+                {x: 430, y: 500, curve: true, cx: 440, cy: 460},
+                {x: 400, y: 580, curve: true, cx: 420, cy: 540},
+                {x: 350, y: 640, curve: true, cx: 375, cy: 610},
+                {x: 320, y: 660, curve: true, cx: 335, cy: 650},
+                {x: 300, y: 640, curve: true, cx: 310, cy: 655},
+                {x: 310, y: 580, curve: true, cx: 300, cy: 610},
+                {x: 330, y: 500, curve: true, cx: 320, cy: 540},
+                {x: 360, y: 420, curve: true, cx: 345, cy: 460},
+                {x: 400, y: 370, curve: true, cx: 380, cy: 395},
+                {x: 420, y: 360}
+            ];
+            drawLandmass(southAmerica, '#6b8e4e', '#5b7e3e');
+            
+            // Australia
+            const australia = [
+                {x: 1450, y: 500},
+                {x: 1520, y: 490, curve: true, cx: 1485, cy: 490},
+                {x: 1580, y: 520, curve: true, cx: 1550, cy: 500},
+                {x: 1590, y: 580, curve: true, cx: 1590, cy: 550},
+                {x: 1550, y: 620, curve: true, cx: 1575, cy: 600},
+                {x: 1480, y: 630, curve: true, cx: 1515, cy: 625},
+                {x: 1420, y: 600, curve: true, cx: 1450, cy: 620},
+                {x: 1410, y: 540, curve: true, cx: 1410, cy: 570},
+                {x: 1450, y: 500, curve: true, cx: 1425, cy: 515}
+            ];
+            drawLandmass(australia, '#c4a574', '#b49564');
+            
+            // Greenland
+            const greenland = [
+                {x: 680, y: 80},
+                {x: 720, y: 70, curve: true, cx: 700, cy: 70},
+                {x: 740, y: 120, curve: true, cx: 735, cy: 95},
+                {x: 720, y: 160, curve: true, cx: 735, cy: 140},
+                {x: 680, y: 150, curve: true, cx: 700, cy: 160},
+                {x: 660, y: 100, curve: true, cx: 665, cy: 125},
+                {x: 680, y: 80, curve: true, cx: 665, cy: 90}
+            ];
+            drawLandmass(greenland, '#e0e0e0', '#c0c0c0');
+            
+            // Add ice caps
+            context.fillStyle = 'rgba(255, 255, 255, 0.7)';
+            // Arctic
+            context.fillRect(0, 0, canvas.width, 50);
+            // Antarctic
+            context.fillRect(0, canvas.height - 50, canvas.width, 50);
+            
+            const earthTexture = new THREE.CanvasTexture(canvas);
+            earthTexture.wrapS = THREE.RepeatWrapping;
+            earthTexture.wrapT = THREE.RepeatWrapping;
+            
             const earthMaterial = new THREE.MeshPhongMaterial({
-                color: 0x2233ff,
-                emissive: 0x112244,
-                shininess: 10,
-                specular: 0x222222
+                map: earthTexture,
+                specular: 0x333333,
+                shininess: 20,
+                bumpScale: 0.05
             });
+            
             earthMesh = new THREE.Mesh(earthGeometry, earthMaterial);
             earthMesh.castShadow = true;
             earthMesh.receiveShadow = true;
@@ -425,17 +638,52 @@
             const glow = new THREE.Mesh(glowGeometry, glowMaterial);
             earth.add(glow);
 
-            // Add clouds
+            // Add clouds with procedural texture
             const cloudsGeometry = new THREE.SphereGeometry(5.1, 64, 64);
+            
+            // Create cloud canvas texture
+            const cloudCanvas = document.createElement('canvas');
+            cloudCanvas.width = 512;
+            cloudCanvas.height = 256;
+            const cloudContext = cloudCanvas.getContext('2d');
+            
+            // Create cloud patterns
+            cloudContext.fillStyle = 'rgba(255, 255, 255, 0)';
+            cloudContext.fillRect(0, 0, cloudCanvas.width, cloudCanvas.height);
+            
+            // Draw cloud formations
+            for (let i = 0; i < 50; i++) {
+                const x = Math.random() * cloudCanvas.width;
+                const y = Math.random() * cloudCanvas.height;
+                const radius = Math.random() * 30 + 10;
+                
+                const gradient = cloudContext.createRadialGradient(x, y, 0, x, y, radius);
+                gradient.addColorStop(0, 'rgba(255, 255, 255, 0.6)');
+                gradient.addColorStop(0.5, 'rgba(255, 255, 255, 0.3)');
+                gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+                
+                cloudContext.fillStyle = gradient;
+                cloudContext.beginPath();
+                cloudContext.arc(x, y, radius, 0, Math.PI * 2);
+                cloudContext.fill();
+            }
+            
+            const cloudTexture = new THREE.CanvasTexture(cloudCanvas);
+            cloudTexture.wrapS = THREE.RepeatWrapping;
+            cloudTexture.wrapT = THREE.RepeatWrapping;
+            
             const cloudsMaterial = new THREE.MeshPhongMaterial({
-                color: 0xffffff,
+                map: cloudTexture,
                 transparent: true,
-                opacity: 0.3,
+                opacity: 0.6,
                 side: THREE.DoubleSide,
                 depthWrite: false
             });
             const clouds = new THREE.Mesh(cloudsGeometry, cloudsMaterial);
             earth.add(clouds);
+            
+            // Store clouds reference for animation
+            earth.userData.clouds = clouds;
 
             scene.add(earth);
         }
@@ -611,6 +859,11 @@
             
             // Rotate Earth
             earth.rotation.y += 0.002;
+            
+            // Rotate clouds slightly slower for realism
+            if (earth.userData.clouds) {
+                earth.userData.clouds.rotation.y += 0.0005;
+            }
             
             // Animate asteroids
             asteroids.forEach(asteroid => {
