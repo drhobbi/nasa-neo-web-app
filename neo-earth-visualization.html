@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Near Earth Objects Visualization</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Arial', sans-serif;
+            background: #000;
+            color: #fff;
+            overflow: hidden;
+            position: relative;
+        }
+
+        #canvas {
+            width: 100vw;
+            height: 100vh;
+            display: block;
+            cursor: grab;
+        }
+
+        #canvas:active {
+            cursor: grabbing;
+        }
+
+        .info-panel {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 15px;
+            padding: 20px;
+            max-width: 350px;
+            animation: slideIn 0.5s ease-out;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(-100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        .info-panel h1 {
+            font-size: 24px;
+            margin-bottom: 10px;
+            background: linear-gradient(45deg, #00d4ff, #ff00ff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-shadow: 0 0 30px rgba(0, 212, 255, 0.5);
+        }
+
+        .info-panel h2 {
+            font-size: 18px;
+            margin: 15px 0 10px 0;
+            color: #00d4ff;
+        }
+
+        .stats {
+            font-size: 14px;
+            line-height: 1.8;
+            color: #ccc;
+        }
+
+        .stats strong {
+            color: #fff;
+            font-weight: bold;
+        }
+
+        .legend {
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin: 8px 0;
+            font-size: 13px;
+        }
+
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            margin-right: 10px;
+            box-shadow: 0 0 10px currentColor;
+        }
+
+        .controls {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 10px;
+            padding: 15px;
+            display: flex;
+            gap: 10px;
+            animation: slideUp 0.5s ease-out;
+        }
+
+        @keyframes slideUp {
+            from {
+                transform: translateY(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+
+        .controls button {
+            background: linear-gradient(45deg, #1a1a2e, #16213e);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: #fff;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 14px;
+        }
+
+        .controls button:hover {
+            background: linear-gradient(45deg, #16213e, #0f3460);
+            transform: scale(1.05);
+            box-shadow: 0 5px 20px rgba(0, 212, 255, 0.4);
+        }
+
+        .controls button:active {
+            transform: scale(0.95);
+        }
+
+        .asteroid-tooltip {
+            position: absolute;
+            background: rgba(0, 0, 0, 0.9);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 10px;
+            padding: 15px;
+            pointer-events: none;
+            display: none;
+            font-size: 13px;
+            max-width: 300px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            animation: fadeIn 0.2s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: scale(0.9);
+            }
+            to {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
+
+        .asteroid-tooltip h3 {
+            color: #00d4ff;
+            margin-bottom: 8px;
+            font-size: 16px;
+        }
+
+        .asteroid-tooltip p {
+            margin: 5px 0;
+            color: #ccc;
+        }
+
+        .asteroid-tooltip .hazard {
+            color: #ff4444;
+            font-weight: bold;
+        }
+
+        .loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 24px;
+            color: #00d4ff;
+            text-align: center;
+        }
+
+        .loading::after {
+            content: '...';
+            animation: dots 1.5s infinite;
+        }
+
+        @keyframes dots {
+            0%, 20% { content: '.'; }
+            40% { content: '..'; }
+            60%, 100% { content: '...'; }
+        }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <div class="loading" id="loading">Loading NASA NEO Data</div>
+    <canvas id="canvas"></canvas>
+    
+    <div class="info-panel" style="display: none;">
+        <h1>Near Earth Objects</h1>
+        <div class="stats">
+            <p><strong>Date Range:</strong> June 1-7, 2025</p>
+            <p><strong>Total NEOs:</strong> <span id="total-neos">0</span></p>
+            <p><strong>Potentially Hazardous:</strong> <span id="hazardous-count">0</span></p>
+            <p><strong>Closest Approach:</strong> <span id="closest-approach">-</span></p>
+        </div>
+        
+        <div class="legend">
+            <h2>Legend</h2>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #00ff00;"></div>
+                <span>Safe NEO</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #ffff00;"></div>
+                <span>Medium NEO</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #ff0000;"></div>
+                <span>Potentially Hazardous</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #ff00ff;"></div>
+                <span>Very Close (<10 lunar distances)</span>
+            </div>
+        </div>
+    </div>
+    
+    <div class="controls" style="display: none;">
+        <button id="toggleOrbits">Toggle Orbits</button>
+        <button id="toggleRotation">Pause Rotation</button>
+        <button id="resetView">Reset View</button>
+    </div>
+    
+    <div class="asteroid-tooltip" id="tooltip"></div>
+
+    <script>
+        // NASA NEO Data (parsed from the API response)
+        const neoData = {"links":{"next":"http://api.nasa.gov/neo/rest/v1/feed?start_date=2025-06-07&end_date=2025-06-13&detailed=false&api_key=rE3YeeGL2OIhkpoYSDnkUPZcwQQATXJePaQBurMI","previous":"http://api.nasa.gov/neo/rest/v1/feed?start_date=2025-05-26&end_date=2025-06-01&detailed=false&api_key=rE3YeeGL2OIhkpoYSDnkUPZcwQQATXJePaQBurMI","self":"http://api.nasa.gov/neo/rest/v1/feed?start_date=2025-06-01&end_date=2025-06-07&detailed=false&api_key=rE3YeeGL2OIhkpoYSDnkUPZcwQQATXJePaQBurMI"},"element_count":76,"near_earth_objects":{"2025-06-02":[{"links":{"self":"http://api.nasa.gov/neo/rest/v1/neo/2478784?api_key=rE3YeeGL2OIhkpoYSDnkUPZcwQQATXJePaQBurMI"},"id":"2478784","neo_reference_id":"2478784","name":"478784 (2012 UV136)","nasa_jpl_url":"https://ssd.jpl.nasa.gov/tools/sbdb_lookup.html#/?sstr=2478784","absolute_magnitude_h":25.6,"estimated_diameter":{"kilometers":{"estimated_diameter_min":0.0201629919,"estimated_diameter_max":0.0450858206},"meters":{"estimated_diameter_min":20.1629919443,"estimated_diameter_max":45.0858206172},"miles":{"estimated_diameter_min":0.0125286985,"estimated_diameter_max":0.0280150214},"feet":{"estimated_diameter_min":66.1515504905,"estimated_diameter_max":147.9193637137}},"is_potentially_hazardous_asteroid":false,"close_approach_data":[{"close_approach_date":"2025-06-02","close_approach_date_full":"2025-Jun-02 15:41","epoch_date_close_approach":1748878860000,"relative_velocity":{"kilometers_per_second":"13.7531262564","kilometers_per_hour":"49511.2545229381","miles_per_hour":"30764.3681228779"},"miss_distance":{"astronomical":"0.3371883706","lunar":"131.1662761634","kilometers":"50442662.030530622","miles":"31343616.7629497036"},"orbiting_body":"Earth"}],"is_sentry_object":false},{"links":{"self":"http://api.nasa.gov/neo/rest/v1/neo/3727041?api_key=rE3YeeGL2OIhkpoYSDnkUPZcwQQATXJePaQBurMI"},"id":"3727041","neo_reference_id":"3727041","name":"(2015 RQ35)","nasa_jpl_url":"https://ssd.jpl.nasa.gov/tools/sbdb_lookup.html#/?sstr=3727041","absolute_magnitude_h":24.3,"estimated_diameter":{"kilometers":{"estimated_diameter_min":0.0366906138,"estimated_diameter_max":0.0820427065},"meters":{"estimated_diameter_min":36.6906137531,"estimated_diameter_max":82.0427064882},"miles":{"estimated_diameter_min":0.0227984834,"estimated_diameter_max":0.0509789586},"feet":{"estimated_diameter_min":120.3760332259,"estimated_diameter_max":269.1689931548}},"is_potentially_hazardous_asteroid":false,"close_approach_data":[{"close_approach_date":"2025-06-02","close_approach_date_full":"2025-Jun-02 20:03","epoch_date_close_approach":1748894580000,"relative_velocity":{"kilometers_per_second":"3.3194961751","kilometers_per_hour":"11950.1862302705","miles_per_hour":"7425.3809940256"},"miss_distance":{"astronomical":"0.4709293929","lunar":"183.1915338381","kilometers":"70450034.098233123","miles":"43775621.2861101774"},"orbiting_body":"Earth"}],"is_sentry_object":false}],"2025-06-01":[{"links":{"self":"http://api.nasa.gov/neo/rest/v1/neo/3483652?api_key=rE3YeeGL2OIhkpoYSDnkUPZcwQQATXJePaQBurMI"},"id":"3483652","neo_reference_id":"3483652","name":"(2009 XL8)","nasa_jpl_url":"https://ssd.jpl.nasa.gov/tools/sbdb_lookup.html#/?sstr=3483652","absolute_magnitude_h":22.6,"estimated_diameter":{"kilometers":{"estimated_diameter_min":0.0802703167,"estimated_diameter_max":0.1794898848},"meters":{"estimated_diameter_min":80.2703167283,"estimated_diameter_max":179.4898847799},"miles":{"estimated_diameter_min":0.049877647,"estimated_diameter_max":0.1115298092},"feet":{"estimated_diameter_min":263.3540659348,"estimated_diameter_max":588.8775935812}},"is_potentially_hazardous_asteroid":false,"close_approach_data":[{"close_approach_date":"2025-06-01","close_approach_date_full":"2025-Jun-01 18:47","epoch_date_close_approach":1748803620000,"relative_velocity":{"kilometers_per_second":"12.1795072264","kilometers_per_hour":"43846.2260151113","miles_per_hour":"27244.3397147785"},"miss_distance":{"astronomical":"0.2844064664","lunar":"110.6341154296","kilometers":"42546601.587666568","miles":"26437232.3158239184"},"orbiting_body":"Earth"}],"is_sentry_object":false}],"2025-06-04":[{"links":{"self":"http://api.nasa.gov/neo/rest/v1/neo/2438908?api_key=rE3YeeGL2OIhkpoYSDnkUPZcwQQATXJePaQBurMI"},"id":"2438908","neo_reference_id":"2438908","name":"438908 (2009 XO)","nasa_jpl_url":"https://ssd.jpl.nasa.gov/tools/sbdb_lookup.html#/?sstr=2438908","absolute_magnitude_h":20.63,"estimated_diameter":{"kilometers":{"estimated_diameter_min":0.1988634532,"estimated_diameter_max":0.4446721997},"meters":{"estimated_diameter_min":198.8634532359,"estimated_diameter_max":444.6721996757},"miles":{"estimated_diameter_min":0.1235679828,"estimated_diameter_max":0.2763064094},"feet":{"estimated_diameter_min":652.4391719144,"estimated_diameter_max":1458.8983395842}},"is_potentially_hazardous_asteroid":true,"close_approach_data":[{"close_approach_date":"2025-06-04","close_approach_date_full":"2025-Jun-04 06:17","epoch_date_close_approach":1749017820000,"relative_velocity":{"kilometers_per_second":"25.2606244903","kilometers_per_hour":"90938.2481652582","miles_per_hour":"56505.4909224628"},"miss_distance":{"astronomical":"0.4428071625","lunar":"172.2519862125","kilometers":"66243008.330743875","miles":"41161496.692760475"},"orbiting_body":"Earth"}],"is_sentry_object":false}],"2025-06-03":[{"links":{"self":"http://api.nasa.gov/neo/rest/v1/neo/3172333?api_key=rE3YeeGL2OIhkpoYSDnkUPZcwQQATXJePaQBurMI"},"id":"3172333","neo_reference_id":"3172333","name":"(2004 BW18)","nasa_jpl_url":"https://ssd.jpl.nasa.gov/tools/sbdb_lookup.html#/?sstr=3172333","absolute_magnitude_h":22.5,"estimated_diameter":{"kilometers":{"estimated_diameter_min":0.0840533402,"estimated_diameter_max":0.1879489824},"meters":{"estimated_diameter_min":84.0533402073,"estimated_diameter_max":187.9489824394},"miles":{"estimated_diameter_min":0.0522283081,"estimated_diameter_max":0.1167860472},"feet":{"estimated_diameter_min":275.7655606856,"estimated_diameter_max":616.6305395464}},"is_potentially_hazardous_asteroid":false,"close_approach_data":[{"close_approach_date":"2025-06-03","close_approach_date_full":"2025-Jun-03 18:26","epoch_date_close_approach":1748975160000,"relative_velocity":{"kilometers_per_second":"6.2534104709","kilometers_per_hour":"22512.2776953196","miles_per_hour":"13988.2538824057"},"miss_distance":{"astronomical":"0.4674188538","lunar":"181.8259341282","kilometers":"69924864.926321406","miles":"43449296.2945751628"},"orbiting_body":"Earth"}],"is_sentry_object":false}],"2025-06-06":[{"links":{"self":"http://api.nasa.gov/neo/rest/v1/neo/3623484?api_key=rE3YeeGL2OIhkpoYSDnkUPZcwQQATXJePaQBurMI"},"id":"3623484","neo_reference_id":"3623484","name":"(2013 AK11)","nasa_jpl_url":"https://ssd.jpl.nasa.gov/tools/sbdb_lookup.html#/?sstr=3623484","absolute_magnitude_h":23.5,"estimated_diameter":{"kilometers":{"estimated_diameter_min":0.0530340723,"estimated_diameter_max":0.1185877909},"meters":{"estimated_diameter_min":53.0340723319,"estimated_diameter_max":118.5877908577},"miles":{"estimated_diameter_min":0.0329538346,"estimated_diameter_max":0.0736870142},"feet":{"estimated_diameter_min":173.9963058693,"estimated_diameter_max":389.0675677576}},"is_potentially_hazardous_asteroid":false,"close_approach_data":[{"close_approach_date":"2025-06-06","close_approach_date_full":"2025-Jun-06 01:15","epoch_date_close_approach":1749172500000,"relative_velocity":{"kilometers_per_second":"8.9820447865","kilometers_per_hour":"32335.3612313994","miles_per_hour":"20091.9359829214"},"miss_distance":{"astronomical":"0.3894778736","lunar":"151.5068928304","kilometers":"58265060.302689232","miles":"36204229.6596541216"},"orbiting_body":"Earth"}],"is_sentry_object":false},{"links":{"self":"http://api.nasa.gov/neo/rest/v1/neo/3669253?api_key=rE3YeeGL2OIhkpoYSDnkUPZcwQQATXJePaQBurMI"},"id":"3669253","neo_reference_id":"3669253","name":"(2014 HQ124)","nasa_jpl_url":"https://ssd.jpl.nasa.gov/tools/sbdb_lookup.html#/?sstr=3669253","absolute_magnitude_h":18.95,"estimated_diameter":{"kilometers":{"estimated_diameter_min":0.4310771239,"estimated_diameter_max":0.9639177525},"meters":{"estimated_diameter_min":431.077123878,"estimated_diameter_max":963.9177525363},"miles":{"estimated_diameter_min":0.2678588235,"estimated_diameter_max":0.5989505378},"feet":{"estimated_diameter_min":1414.2950711039,"estimated_diameter_max":3162.4599192312}},"is_potentially_hazardous_asteroid":true,"close_approach_data":[{"close_approach_date":"2025-06-06","close_approach_date_full":"2025-Jun-06 23:00","epoch_date_close_approach":1749250800000,"relative_velocity":{"kilometers_per_second":"15.0465992854","kilometers_per_hour":"54167.7574275401","miles_per_hour":"33657.7379415734"},"miss_distance":{"astronomical":"0.0723064889","lunar":"28.1272241821","kilometers":"10816896.726618643","miles":"6721307.9547295534"},"orbiting_body":"Earth"}],"is_sentry_object":false}],"2025-06-05":[{"links":{"self":"http://api.nasa.gov/neo/rest/v1/neo/2162039?api_key=rE3YeeGL2OIhkpoYSDnkUPZcwQQATXJePaQBurMI"},"id":"2162039","neo_reference_id":"2162039","name":"162039 (1996 JG)","nasa_jpl_url":"https://ssd.jpl.nasa.gov/tools/sbdb_lookup.html#/?sstr=2162039","absolute_magnitude_h":18.93,"estimated_diameter":{"kilometers":{"estimated_diameter_min":0.4350658314,"estimated_diameter_max":0.9728367737},"meters":{"estimated_diameter_min":435.0658313955,"estimated_diameter_max":972.8367736878},"miles":{"estimated_diameter_min":0.2703372907,"estimated_diameter_max":0.6044925589},"feet":{"estimated_diameter_min":1427.3813822757,"estimated_diameter_max":3191.721800586}},"is_potentially_hazardous_asteroid":true,"close_approach_data":[{"close_approach_date":"2025-06-05","close_approach_date_full":"2025-Jun-05 12:03","epoch_date_close_approach":1749124980000,"relative_velocity":{"kilometers_per_second":"15.1685892059","kilometers_per_hour":"54606.9211414016","miles_per_hour":"33930.6171947781"},"miss_distance":{"astronomical":"0.1684248237","lunar":"65.5172564193","kilometers":"25195994.880645519","miles":"15656065.2374414022"},"orbiting_body":"Earth"}],"is_sentry_object":false},{"links":{"self":"http://api.nasa.gov/neo/rest/v1/neo/2419624?api_key=rE3YeeGL2OIhkpoYSDnkUPZcwQQATXJePaQBurMI"},"id":"2419624","neo_reference_id":"2419624","name":"419624 (2010 SO16)","nasa_jpl_url":"https://ssd.jpl.nasa.gov/tools/sbdb_lookup.html#/?sstr=2419624","absolute_magnitude_h":20.44,"estimated_diameter":{"kilometers":{"estimated_diameter_min":0.2170475943,"estimated_diameter_max":0.4853331752},"meters":{"estimated_diameter_min":217.0475943071,"estimated_diameter_max":485.3331752235},"miles":{"estimated_diameter_min":0.1348670807,"estimated_diameter_max":0.3015719604},"feet":{"estimated_diameter_min":712.0984293066,"estimated_diameter_max":1592.3004946003}},"is_potentially_hazardous_asteroid":true,"close_approach_data":[{"close_approach_date":"2025-06-05","close_approach_date_full":"2025-Jun-05 18:47","epoch_date_close_approach":1749149220000,"relative_velocity":{"kilometers_per_second":"17.4631359924","kilometers_per_hour":"62867.2895727754","miles_per_hour":"39063.2889014837"},"miss_distance":{"astronomical":"0.4794551593","lunar":"186.5080569677","kilometers":"71725470.591790691","miles":"44568140.7735898958"},"orbiting_body":"Earth"}],"is_sentry_object":false},{"links":{"self":"http://api.nasa.gov/neo/rest/v1/neo/2424482?api_key=rE3YeeGL2OIhkpoYSDnkUPZcwQQATXJePaQBurMI"},"id":"2424482","neo_reference_id":"2424482","name":"424482 (2008 DG5)","nasa_jpl_url":"https://ssd.jpl.nasa.gov/tools/sbdb_lookup.html#/?sstr=2424482","absolute_magnitude_h":19.57,"estimated_diameter":{"kilometers":{"estimated_diameter_min":0.3240074354,"estimated_diameter_max":0.7245026508},"meters":{"estimated_diameter_min":324.0074353942,"estimated_diameter_max":724.5026507569},"miles":{"estimated_diameter_min":0.2013288241,"estimated_diameter_max":0.4501849366},"feet":{"estimated_diameter_min":1063.0165543388,"estimated_diameter_max":2376.9772767092}},"is_potentially_hazardous_asteroid":true,"close_approach_data":[{"close_approach_date":"2025-06-05","close_approach_date_full":"2025-Jun-05 23:59","epoch_date_close_approach":1749167940000,"relative_velocity":{"kilometers_per_second":"6.2083864431","kilometers_per_hour":"22350.1911951142","miles_per_hour":"13887.5396345419"},"miss_distance":{"astronomical":"0.0233478373","lunar":"9.0823087097","kilometers":"3492786.729186551","miles":"2170317.0345783638"},"orbiting_body":"Earth"}],"is_sentry_object":false}],"2025-06-07":[{"links":{"self":"http://api.nasa.gov/neo/rest/v1/neo/3591611?api_key=rE3YeeGL2OIhkpoYSDnkUPZcwQQATXJePaQBurMI"},"id":"3591611","neo_reference_id":"3591611","name":"(2011 YG6)","nasa_jpl_url":"https://ssd.jpl.nasa.gov/tools/sbdb_lookup.html#/?sstr=3591611","absolute_magnitude_h":21.09,"estimated_diameter":{"kilometers":{"estimated_diameter_min":0.1608996045,"estimated_diameter_max":0.3597824532},"meters":{"estimated_diameter_min":160.8996045096,"estimated_diameter_max":359.7824532363},"miles":{"estimated_diameter_min":0.0999783482,"estimated_diameter_max":0.2235583827},"feet":{"estimated_diameter_min":527.8858584592,"estimated_diameter_max":1180.3886638757}},"is_potentially_hazardous_asteroid":true,"close_approach_data":[{"close_approach_date":"2025-06-07","close_approach_date_full":"2025-Jun-07 13:05","epoch_date_close_approach":1749301500000,"relative_velocity":{"kilometers_per_second":"26.3258700233","kilometers_per_hour":"94773.1320838328","miles_per_hour":"58888.3386550905"},"miss_distance":{"astronomical":"0.4544401217","lunar":"176.7772073413","kilometers":"67983274.248860779","miles":"42242847.7913615902"},"orbiting_body":"Earth"}],"is_sentry_object":false}]}};
+
+        // Initialize Three.js
+        let scene, camera, renderer;
+        let earth, earthMesh;
+        let asteroids = [];
+        let raycaster, mouse;
+        let showOrbits = true;
+        let autoRotate = true;
+        let controls;
+
+        // Process NEO data
+        let allNEOs = [];
+        let hazardousCount = 0;
+        let closestApproach = { distance: Infinity, neo: null };
+
+        // Flatten NEO data
+        for (const date in neoData.near_earth_objects) {
+            neoData.near_earth_objects[date].forEach(neo => {
+                allNEOs.push({...neo, date});
+                if (neo.is_potentially_hazardous_asteroid) hazardousCount++;
+                
+                const distance = parseFloat(neo.close_approach_data[0].miss_distance.lunar);
+                if (distance < closestApproach.distance) {
+                    closestApproach = { distance, neo };
+                }
+            });
+        }
+
+        function init() {
+            // Hide loading
+            document.getElementById('loading').style.display = 'none';
+            document.querySelector('.info-panel').style.display = 'block';
+            document.querySelector('.controls').style.display = 'flex';
+
+            // Update stats
+            document.getElementById('total-neos').textContent = allNEOs.length;
+            document.getElementById('hazardous-count').textContent = hazardousCount;
+            if (closestApproach.neo) {
+                document.getElementById('closest-approach').textContent = 
+                    `${closestApproach.neo.name} (${closestApproach.distance.toFixed(1)} LD)`;
+            }
+
+            // Scene setup
+            scene = new THREE.Scene();
+            scene.fog = new THREE.Fog(0x000000, 100, 500);
+
+            // Camera
+            camera = new THREE.PerspectiveCamera(
+                75,
+                window.innerWidth / window.innerHeight,
+                0.1,
+                1000
+            );
+            camera.position.set(0, 0, 30);
+
+            // Renderer
+            renderer = new THREE.WebGLRenderer({
+                canvas: document.getElementById('canvas'),
+                antialias: true,
+                alpha: true
+            });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+            // Lights
+            const ambientLight = new THREE.AmbientLight(0x404040, 0.5);
+            scene.add(ambientLight);
+
+            const sunLight = new THREE.DirectionalLight(0xffffff, 1);
+            sunLight.position.set(50, 0, 0);
+            sunLight.castShadow = true;
+            scene.add(sunLight);
+
+            // Add stars
+            createStarfield();
+
+            // Create Earth
+            createEarth();
+
+            // Create asteroids
+            createAsteroids();
+
+            // Raycaster for mouse interaction
+            raycaster = new THREE.Raycaster();
+            mouse = new THREE.Vector2();
+
+            // Add event listeners
+            window.addEventListener('resize', onWindowResize);
+            window.addEventListener('mousemove', onMouseMove);
+            
+            // Controls
+            setupControls();
+
+            // Start animation
+            animate();
+        }
+
+        function createStarfield() {
+            const starsGeometry = new THREE.BufferGeometry();
+            const starsMaterial = new THREE.PointsMaterial({
+                color: 0xffffff,
+                size: 0.1,
+                transparent: true,
+                opacity: 0.8,
+                blending: THREE.AdditiveBlending
+            });
+
+            const starsVertices = [];
+            for (let i = 0; i < 10000; i++) {
+                const x = (Math.random() - 0.5) * 1000;
+                const y = (Math.random() - 0.5) * 1000;
+                const z = (Math.random() - 0.5) * 1000;
+                starsVertices.push(x, y, z);
+            }
+
+            starsGeometry.setAttribute('position', new THREE.Float32BufferAttribute(starsVertices, 3));
+            const stars = new THREE.Points(starsGeometry, starsMaterial);
+            scene.add(stars);
+        }
+
+        function createEarth() {
+            earth = new THREE.Group();
+            
+            // Earth sphere
+            const earthGeometry = new THREE.SphereGeometry(5, 64, 64);
+            const earthMaterial = new THREE.MeshPhongMaterial({
+                color: 0x2233ff,
+                emissive: 0x112244,
+                shininess: 10,
+                specular: 0x222222
+            });
+            earthMesh = new THREE.Mesh(earthGeometry, earthMaterial);
+            earthMesh.castShadow = true;
+            earthMesh.receiveShadow = true;
+            earth.add(earthMesh);
+
+            // Earth glow
+            const glowGeometry = new THREE.SphereGeometry(5.5, 32, 32);
+            const glowMaterial = new THREE.ShaderMaterial({
+                uniforms: {
+                    c: { type: "f", value: 0.5 },
+                    p: { type: "f", value: 4.0 }
+                },
+                vertexShader: `
+                    varying vec3 vNormal;
+                    void main() {
+                        vNormal = normalize(normalMatrix * normal);
+                        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                    }
+                `,
+                fragmentShader: `
+                    uniform float c;
+                    uniform float p;
+                    varying vec3 vNormal;
+                    void main() {
+                        float intensity = pow(c - dot(vNormal, vec3(0, 0, 1.0)), p);
+                        gl_FragColor = vec4(0.3, 0.6, 1.0, 1.0) * intensity;
+                    }
+                `,
+                side: THREE.BackSide,
+                blending: THREE.AdditiveBlending,
+                transparent: true
+            });
+            const glow = new THREE.Mesh(glowGeometry, glowMaterial);
+            earth.add(glow);
+
+            // Add clouds
+            const cloudsGeometry = new THREE.SphereGeometry(5.1, 64, 64);
+            const cloudsMaterial = new THREE.MeshPhongMaterial({
+                color: 0xffffff,
+                transparent: true,
+                opacity: 0.3,
+                side: THREE.DoubleSide,
+                depthWrite: false
+            });
+            const clouds = new THREE.Mesh(cloudsGeometry, cloudsMaterial);
+            earth.add(clouds);
+
+            scene.add(earth);
+        }
+
+        function createAsteroids() {
+            allNEOs.forEach((neo, index) => {
+                const asteroid = new THREE.Group();
+                
+                // Calculate position based on miss distance
+                const distance = parseFloat(neo.close_approach_data[0].miss_distance.lunar);
+                const scaledDistance = Math.min(distance * 0.15 + 8, 50); // Scale for visibility
+                
+                // Random angle for orbital position
+                const angle = (index / allNEOs.length) * Math.PI * 2;
+                const x = Math.cos(angle) * scaledDistance;
+                const z = Math.sin(angle) * scaledDistance;
+                const y = (Math.random() - 0.5) * 5;
+                
+                // Asteroid size based on estimated diameter
+                const size = Math.min(neo.estimated_diameter.kilometers.estimated_diameter_max * 10, 0.5);
+                
+                // Asteroid color based on characteristics
+                let color;
+                if (distance < 10) {
+                    color = 0xff00ff; // Very close - purple
+                } else if (neo.is_potentially_hazardous_asteroid) {
+                    color = 0xff0000; // Hazardous - red
+                } else if (size > 0.3) {
+                    color = 0xffff00; // Large - yellow
+                } else {
+                    color = 0x00ff00; // Safe - green
+                }
+                
+                // Create asteroid mesh
+                const asteroidGeometry = new THREE.SphereGeometry(size, 16, 16);
+                const asteroidMaterial = new THREE.MeshPhongMaterial({
+                    color: color,
+                    emissive: color,
+                    emissiveIntensity: 0.3
+                });
+                const asteroidMesh = new THREE.Mesh(asteroidGeometry, asteroidMaterial);
+                asteroidMesh.userData = { neo, index };
+                asteroid.add(asteroidMesh);
+                
+                // Add glow effect
+                const glowGeometry = new THREE.SphereGeometry(size * 1.5, 8, 8);
+                const glowMaterial = new THREE.MeshBasicMaterial({
+                    color: color,
+                    transparent: true,
+                    opacity: 0.3,
+                    blending: THREE.AdditiveBlending
+                });
+                const glowMesh = new THREE.Mesh(glowGeometry, glowMaterial);
+                asteroid.add(glowMesh);
+                
+                // Create orbit
+                const orbitGeometry = new THREE.RingGeometry(scaledDistance - 0.1, scaledDistance + 0.1, 64);
+                const orbitMaterial = new THREE.MeshBasicMaterial({
+                    color: color,
+                    transparent: true,
+                    opacity: 0.2,
+                    side: THREE.DoubleSide
+                });
+                const orbit = new THREE.Mesh(orbitGeometry, orbitMaterial);
+                orbit.rotation.x = Math.PI / 2;
+                asteroid.userData = { orbit };
+                scene.add(orbit);
+                
+                asteroid.position.set(x, y, z);
+                asteroid.userData.originalPosition = { x, y, z };
+                asteroid.userData.neo = neo;
+                asteroid.userData.angle = angle;
+                asteroid.userData.distance = scaledDistance;
+                
+                asteroids.push(asteroid);
+                scene.add(asteroid);
+            });
+        }
+
+        function setupControls() {
+            // Basic orbit controls simulation
+            let mouseX = 0, mouseY = 0;
+            let targetX = 0, targetY = 0;
+            let isMouseDown = false;
+
+            document.addEventListener('mousedown', () => isMouseDown = true);
+            document.addEventListener('mouseup', () => isMouseDown = false);
+            document.addEventListener('mousemove', (e) => {
+                if (isMouseDown) {
+                    mouseX = (e.clientX - window.innerWidth / 2) * 0.5;
+                    mouseY = (e.clientY - window.innerHeight / 2) * 0.5;
+                }
+            });
+
+            controls = {
+                update: function() {
+                    targetX += (mouseX - targetX) * 0.05;
+                    targetY += (mouseY - targetY) * 0.05;
+                    
+                    if (!isMouseDown && autoRotate) {
+                        targetX += 0.5;
+                    }
+                    
+                    scene.rotation.y = targetX * 0.01;
+                    scene.rotation.x = targetY * 0.01;
+                }
+            };
+
+            // Button controls
+            document.getElementById('toggleOrbits').addEventListener('click', () => {
+                showOrbits = !showOrbits;
+                asteroids.forEach(asteroid => {
+                    if (asteroid.userData.orbit) {
+                        asteroid.userData.orbit.visible = showOrbits;
+                    }
+                });
+            });
+
+            document.getElementById('toggleRotation').addEventListener('click', (e) => {
+                autoRotate = !autoRotate;
+                e.target.textContent = autoRotate ? 'Pause Rotation' : 'Resume Rotation';
+            });
+
+            document.getElementById('resetView').addEventListener('click', () => {
+                scene.rotation.set(0, 0, 0);
+                mouseX = mouseY = targetX = targetY = 0;
+            });
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function onMouseMove(event) {
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+            // Check for asteroid hover
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects(scene.children, true);
+            
+            const tooltip = document.getElementById('tooltip');
+            let found = false;
+            
+            for (let intersect of intersects) {
+                if (intersect.object.userData.neo) {
+                    found = true;
+                    const neo = intersect.object.userData.neo;
+                    tooltip.innerHTML = `
+                        <h3>${neo.name}</h3>
+                        <p><strong>Diameter:</strong> ${neo.estimated_diameter.meters.estimated_diameter_max.toFixed(0)}m</p>
+                        <p><strong>Distance:</strong> ${parseFloat(neo.close_approach_data[0].miss_distance.lunar).toFixed(1)} lunar distances</p>
+                        <p><strong>Speed:</strong> ${neo.close_approach_data[0].relative_velocity.kilometers_per_hour.split('.')[0]} km/h</p>
+                        <p><strong>Date:</strong> ${neo.close_approach_data[0].close_approach_date}</p>
+                        ${neo.is_potentially_hazardous_asteroid ? '<p class="hazard">⚠️ Potentially Hazardous</p>' : ''}
+                    `;
+                    tooltip.style.display = 'block';
+                    tooltip.style.left = event.clientX + 10 + 'px';
+                    tooltip.style.top = event.clientY + 10 + 'px';
+                    break;
+                }
+            }
+            
+            if (!found) {
+                tooltip.style.display = 'none';
+            }
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            // Rotate Earth
+            earth.rotation.y += 0.002;
+            
+            // Animate asteroids
+            asteroids.forEach(asteroid => {
+                asteroid.userData.angle += 0.001 / (asteroid.userData.distance * 0.1);
+                const x = Math.cos(asteroid.userData.angle) * asteroid.userData.distance;
+                const z = Math.sin(asteroid.userData.angle) * asteroid.userData.distance;
+                asteroid.position.x = x;
+                asteroid.position.z = z;
+                
+                // Pulsing effect for close asteroids
+                if (asteroid.userData.neo.close_approach_data[0].miss_distance.lunar < 10) {
+                    const scale = 1 + Math.sin(Date.now() * 0.005) * 0.2;
+                    asteroid.scale.set(scale, scale, scale);
+                }
+            });
+            
+            // Update controls
+            if (controls) {
+                controls.update();
+            }
+            
+            renderer.render(scene, camera);
+        }
+
+        // Initialize when page loads
+        window.addEventListener('load', init);
+    </script>
+</body>
+</html>
